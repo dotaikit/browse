@@ -18,13 +18,13 @@ type State struct {
 	ChromeURL string    `json:"chrome_url"`
 }
 
-// StateDir returns the .browse directory path relative to cwd.
+// StateDir returns the ~/.browse directory path.
 func StateDir() (string, error) {
-	cwd, err := os.Getwd()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(cwd, ".browse"), nil
+	return filepath.Join(home, ".browse"), nil
 }
 
 // StatePath returns the full path to state.json.
