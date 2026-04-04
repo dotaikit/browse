@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            archive: browse-linux-amd64.tar.gz
+          - goos: linux
+            goarch: arm64
+            archive: browse-linux-arm64.tar.gz
+          - goos: darwin
+            goarch: amd64
+            archive: browse-darwin-amd64.tar.gz
+          - goos: darwin
+            goarch: arm64
+            archive: browse-darwin-arm64.tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/browse ./cmd/browse
+
+      - name: Archive binary
+        run: tar -C dist -czf "dist/${{ matrix.archive }}" browse
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.archive }}
+          path: dist/${{ matrix.archive }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create checksums
+        run: |
+          cp install.sh dist/install.sh
+          chmod +x dist/install.sh
+          (cd dist && sha256sum browse-*.tar.gz > checksums.txt)
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/browse-linux-amd64.tar.gz \
+            dist/browse-linux-arm64.tar.gz \
+            dist/browse-darwin-amd64.tar.gz \
+            dist/browse-darwin-arm64.tar.gz \
+            dist/checksums.txt \
+            dist/install.sh \
+            --title "${GITHUB_REF_NAME}" \
+            --notes ""

@@ -1,0 +1,7 @@
+.browse/
+.ai/tmp/
+.codex
+CLAUDE.md
+/browse
+browser.test
+.playwright-mcp/

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Page - Nested Iframe</title>
+  <style>
+    body { font-family: sans-serif; }
+    iframe { border: 1px solid #ccc; width: 460px; height: 220px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <h1 id="main-title">Main Nested Page</h1>
+  <iframe id="outer-frame" name="outerframe" srcdoc='
+    <!doctype html>
+    <html lang="en">
+    <body>
+      <h2 id="outer-title">Outer Frame</h2>
+      <iframe id="inner-frame" name="innerframe" src="data:text/html;charset=utf-8,%3Chtml%3E%3Cbody%3E%3Ch3%20id%3D%22inner-title%22%3EInner%20Frame%3C/h3%3E%3Cinput%20id%3D%22inner-input%22%20type%3D%22text%22%20value%3D%22%22%3E%3C/body%3E%3C/html%3E"></iframe>
+    </body>
+    </html>
+  '></iframe>
+</body>
+</html>
