@@ -1,10 +1,14 @@
 package browser
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"net"
 	"net/url"
 	"os"
@@ -20,6 +24,7 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
+	"golang.org/x/image/draw"
 )
 
 // --- Navigation ---
@@ -983,6 +988,10 @@ func (m *Manager) cmdScreenshot(args []string) (string, error) {
 	outPath := ""
 	viewportOnly := false
 	var clip *page.Viewport
+	var scale float64
+	var width int
+
+	usage := "usage: screenshot [--viewport] [--clip x,y,w,h] [--scale N] [--width N] [path]"
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -992,7 +1001,7 @@ func (m *Manager) cmdScreenshot(args []string) (string, error) {
 			viewportOnly = true
 		case arg == "--clip":
 			if i+1 >= len(args) {
-				return "", fmt.Errorf("usage: screenshot [--viewport] [--clip x,y,w,h] [path]")
+				return "", errors.New(usage)
 			}
 			parsedClip, err := parseScreenshotClip(args[i+1])
 			if err != nil {
@@ -1006,11 +1015,43 @@ func (m *Manager) cmdScreenshot(args []string) (string, error) {
 				return "", err
 			}
 			clip = parsedClip
+		case arg == "--scale":
+			if i+1 >= len(args) {
+				return "", errors.New(usage)
+			}
+			v, err := strconv.ParseFloat(args[i+1], 64)
+			if err != nil || v <= 0 {
+				return "", fmt.Errorf("--scale must be a positive number, got %q", args[i+1])
+			}
+			scale = v
+			i++
+		case strings.HasPrefix(arg, "--scale="):
+			v, err := strconv.ParseFloat(strings.TrimPrefix(arg, "--scale="), 64)
+			if err != nil || v <= 0 {
+				return "", fmt.Errorf("--scale must be a positive number, got %q", strings.TrimPrefix(arg, "--scale="))
+			}
+			scale = v
+		case arg == "--width":
+			if i+1 >= len(args) {
+				return "", errors.New(usage)
+			}
+			v, err := strconv.Atoi(args[i+1])
+			if err != nil || v <= 0 {
+				return "", fmt.Errorf("--width must be a positive integer, got %q", args[i+1])
+			}
+			width = v
+			i++
+		case strings.HasPrefix(arg, "--width="):
+			v, err := strconv.Atoi(strings.TrimPrefix(arg, "--width="))
+			if err != nil || v <= 0 {
+				return "", fmt.Errorf("--width must be a positive integer, got %q", strings.TrimPrefix(arg, "--width="))
+			}
+			width = v
 		case strings.HasPrefix(arg, "-"):
 			return "", fmt.Errorf("unknown screenshot flag: %s", arg)
 		default:
 			if outPath != "" {
-				return "", fmt.Errorf("usage: screenshot [--viewport] [--clip x,y,w,h] [path]")
+				return "", errors.New(usage)
 			}
 			outPath = arg
 		}
@@ -1028,6 +1069,36 @@ func (m *Manager) cmdScreenshot(args []string) (string, error) {
 		return "", fmt.Errorf("screenshot: %w", err)
 	}
 	outPath = resolvedPath
+
+	// Apply --scale: override DPR via EmulateViewport, restore after capture.
+	if scale > 0 {
+		// Read current viewport dimensions
+		var metricsJSON string
+		if err := chromedp.Run(m.ctx, m.evaluate(
+			`JSON.stringify({w: window.innerWidth, h: window.innerHeight})`,
+			&metricsJSON,
+		)); err != nil {
+			return "", fmt.Errorf("screenshot: get viewport metrics: %w", err)
+		}
+		var metrics struct {
+			W int64 `json:"w"`
+			H int64 `json:"h"`
+		}
+		if err := json.Unmarshal([]byte(metricsJSON), &metrics); err != nil {
+			return "", fmt.Errorf("screenshot: parse viewport metrics: %w", err)
+		}
+		if metrics.W == 0 {
+			metrics.W = 1280
+		}
+		if metrics.H == 0 {
+			metrics.H = 720
+		}
+
+		if err := chromedp.Run(m.ctx, chromedp.EmulateViewport(metrics.W, metrics.H, chromedp.EmulateScale(scale))); err != nil {
+			return "", fmt.Errorf("screenshot: set scale: %w", err)
+		}
+		defer chromedp.Run(m.ctx, chromedp.EmulateViewport(metrics.W, metrics.H))
+	}
 
 	var buf []byte
 	if err := chromedp.Run(m.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
@@ -1061,6 +1132,15 @@ func (m *Manager) cmdScreenshot(args []string) (string, error) {
 		}
 	}
 
+	// Apply --width: resize PNG to target width, preserving aspect ratio.
+	if width > 0 {
+		resized, err := resizePNG(buf, width)
+		if err != nil {
+			return "", fmt.Errorf("screenshot: resize: %w", err)
+		}
+		buf = resized
+	}
+
 	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 		return "", err
 	}
@@ -1068,6 +1148,34 @@ func (m *Manager) cmdScreenshot(args []string) (string, error) {
 		return "", fmt.Errorf("write screenshot: %w", err)
 	}
 	return fmt.Sprintf("Screenshot saved to %s", outPath), nil
+}
+
+// resizePNG decodes PNG data, resizes to targetWidth preserving aspect ratio,
+// and re-encodes as PNG.
+func resizePNG(data []byte, targetWidth int) ([]byte, error) {
+	src, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode png: %w", err)
+	}
+	srcBounds := src.Bounds()
+	origW := srcBounds.Dx()
+	origH := srcBounds.Dy()
+	if origW == 0 {
+		return nil, fmt.Errorf("source image has zero width")
+	}
+	newH := origH * targetWidth / origW
+	if newH == 0 {
+		newH = 1
+	}
+
+	dst := image.NewRGBA(image.Rect(0, 0, targetWidth, newH))
+	draw.BiLinear.Scale(dst, dst.Bounds(), src, srcBounds, draw.Over, nil)
+
+	var out bytes.Buffer
+	if err := png.Encode(&out, dst); err != nil {
+		return nil, fmt.Errorf("encode png: %w", err)
+	}
+	return out.Bytes(), nil
 }
 
 func parseScreenshotClip(raw string) (*page.Viewport, error) {
