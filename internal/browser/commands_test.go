@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -197,6 +199,141 @@ func TestCommands(t *testing.T) {
 		}
 	})
 
+	t.Run("ScreenshotScale", func(t *testing.T) {
+		_ = mustExecCommand(t, mgr, "goto", fixtureURL("basic.html"))
+
+		// Take screenshot at scale 1
+		out1 := filepath.Join(t.TempDir(), "scale1.png")
+		ssOut := mustExecCommand(t, mgr, "screenshot", "--scale", "1", out1)
+		assertContains(t, ssOut, "Screenshot saved to")
+
+		data1, err := os.ReadFile(out1)
+		if err != nil {
+			t.Fatalf("read screenshot: %v", err)
+		}
+		img1, err := png.Decode(bytes.NewReader(data1))
+		if err != nil {
+			t.Fatalf("decode png: %v", err)
+		}
+
+		// Take screenshot at scale 2
+		out2 := filepath.Join(t.TempDir(), "scale2.png")
+		mustExecCommand(t, mgr, "screenshot", "--scale", "2", out2)
+
+		data2, err := os.ReadFile(out2)
+		if err != nil {
+			t.Fatalf("read screenshot: %v", err)
+		}
+		img2, err := png.Decode(bytes.NewReader(data2))
+		if err != nil {
+			t.Fatalf("decode png: %v", err)
+		}
+
+		// Scale 2 should produce a larger image than scale 1
+		w1 := img1.Bounds().Dx()
+		w2 := img2.Bounds().Dx()
+		if w2 <= w1 {
+			t.Fatalf("scale=2 width (%d) should be greater than scale=1 width (%d)", w2, w1)
+		}
+	})
+
+	t.Run("ScreenshotWidth", func(t *testing.T) {
+		_ = mustExecCommand(t, mgr, "goto", fixtureURL("basic.html"))
+
+		outPath := filepath.Join(t.TempDir(), "resized.png")
+		ssOut := mustExecCommand(t, mgr, "screenshot", "--width", "400", outPath)
+		assertContains(t, ssOut, "Screenshot saved to")
+
+		data, err := os.ReadFile(outPath)
+		if err != nil {
+			t.Fatalf("read screenshot: %v", err)
+		}
+		img, err := png.Decode(bytes.NewReader(data))
+		if err != nil {
+			t.Fatalf("decode png: %v", err)
+		}
+		if img.Bounds().Dx() != 400 {
+			t.Fatalf("resized width = %d, want 400", img.Bounds().Dx())
+		}
+	})
+
+	t.Run("ScreenshotScaleAndWidth", func(t *testing.T) {
+		_ = mustExecCommand(t, mgr, "goto", fixtureURL("basic.html"))
+
+		outPath := filepath.Join(t.TempDir(), "combined.png")
+		ssOut := mustExecCommand(t, mgr, "screenshot", "--scale", "1", "--width", "800", outPath)
+		assertContains(t, ssOut, "Screenshot saved to")
+
+		data, err := os.ReadFile(outPath)
+		if err != nil {
+			t.Fatalf("read screenshot: %v", err)
+		}
+		img, err := png.Decode(bytes.NewReader(data))
+		if err != nil {
+			t.Fatalf("decode png: %v", err)
+		}
+		if img.Bounds().Dx() != 800 {
+			t.Fatalf("combined width = %d, want 800", img.Bounds().Dx())
+		}
+	})
+
+	t.Run("ScreenshotFlagErrors", func(t *testing.T) {
+		// --scale with non-positive value
+		_, err := mgr.Execute("screenshot", []string{"--scale", "0"})
+		if err == nil {
+			t.Fatal("expected error for --scale 0")
+		}
+		assertContains(t, err.Error(), "--scale must be a positive number")
+
+		// --scale with non-numeric value
+		_, err = mgr.Execute("screenshot", []string{"--scale", "abc"})
+		if err == nil {
+			t.Fatal("expected error for --scale abc")
+		}
+		assertContains(t, err.Error(), "--scale must be a positive number")
+
+		// --width with non-positive value
+		_, err = mgr.Execute("screenshot", []string{"--width", "0"})
+		if err == nil {
+			t.Fatal("expected error for --width 0")
+		}
+		assertContains(t, err.Error(), "--width must be a positive integer")
+
+		// --width with non-numeric value
+		_, err = mgr.Execute("screenshot", []string{"--width", "abc"})
+		if err == nil {
+			t.Fatal("expected error for --width abc")
+		}
+		assertContains(t, err.Error(), "--width must be a positive integer")
+
+		// --scale missing value
+		_, err = mgr.Execute("screenshot", []string{"--scale"})
+		if err == nil {
+			t.Fatal("expected error for --scale without value")
+		}
+		assertContains(t, err.Error(), "usage:")
+
+		// --width missing value
+		_, err = mgr.Execute("screenshot", []string{"--width"})
+		if err == nil {
+			t.Fatal("expected error for --width without value")
+		}
+		assertContains(t, err.Error(), "usage:")
+
+		// negative values
+		_, err = mgr.Execute("screenshot", []string{"--scale", "-1"})
+		if err == nil {
+			t.Fatal("expected error for --scale -1")
+		}
+		assertContains(t, err.Error(), "--scale must be a positive number")
+
+		_, err = mgr.Execute("screenshot", []string{"--width", "-5"})
+		if err == nil {
+			t.Fatal("expected error for --width -5")
+		}
+		assertContains(t, err.Error(), "--width must be a positive integer")
+	})
+
 	t.Run("EmptyPage", func(t *testing.T) {
 		_ = mustExecCommand(t, mgr, "goto", fixtureURL("empty.html"))
 
@@ -347,6 +484,56 @@ func TestParseScreenshotClip(t *testing.T) {
 				}
 				assertContains(t, err.Error(), "greater than 0")
 			})
+		}
+	})
+}
+
+func TestResizePNG(t *testing.T) {
+	// Create a 100x50 test PNG
+	img := image.NewRGBA(image.Rect(0, 0, 100, 50))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encode test png: %v", err)
+	}
+
+	t.Run("ResizeTo50", func(t *testing.T) {
+		resized, err := resizePNG(buf.Bytes(), 50)
+		if err != nil {
+			t.Fatalf("resizePNG: %v", err)
+		}
+		out, err := png.Decode(bytes.NewReader(resized))
+		if err != nil {
+			t.Fatalf("decode resized: %v", err)
+		}
+		if out.Bounds().Dx() != 50 {
+			t.Fatalf("width = %d, want 50", out.Bounds().Dx())
+		}
+		if out.Bounds().Dy() != 25 {
+			t.Fatalf("height = %d, want 25", out.Bounds().Dy())
+		}
+	})
+
+	t.Run("ResizeTo200", func(t *testing.T) {
+		resized, err := resizePNG(buf.Bytes(), 200)
+		if err != nil {
+			t.Fatalf("resizePNG: %v", err)
+		}
+		out, err := png.Decode(bytes.NewReader(resized))
+		if err != nil {
+			t.Fatalf("decode resized: %v", err)
+		}
+		if out.Bounds().Dx() != 200 {
+			t.Fatalf("width = %d, want 200", out.Bounds().Dx())
+		}
+		if out.Bounds().Dy() != 100 {
+			t.Fatalf("height = %d, want 100", out.Bounds().Dy())
+		}
+	})
+
+	t.Run("InvalidPNG", func(t *testing.T) {
+		_, err := resizePNG([]byte("not a png"), 50)
+		if err == nil {
+			t.Fatal("expected error for invalid PNG data")
 		}
 	})
 }

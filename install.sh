@@ -103,6 +103,7 @@ fi
 
 cp "${TMP_DIR}/browse" "${INSTALL_DIR}/browse"
 chmod +x "${INSTALL_DIR}/browse"
+xattr -d com.apple.quarantine "${INSTALL_DIR}/browse" 2>/dev/null || true
 
 printf 'Installed browse to %s\n' "${INSTALL_DIR}/browse"
 

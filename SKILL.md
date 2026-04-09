@@ -111,7 +111,7 @@ Primary way to understand page state. Returns accessibility tree with `@e` refs.
 
 ### Visual
 
-- `screenshot [--viewport] [--clip x,y,w,h] [path]` — save screenshot
+- `screenshot [--viewport] [--clip x,y,w,h] [--scale N] [--width N] [path]` — save screenshot
 - `pdf [path]` — save as PDF
 - `responsive [prefix]` — screenshots at mobile/tablet/desktop
 
