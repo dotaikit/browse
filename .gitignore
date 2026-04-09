@@ -1,7 +1,22 @@
-.browse/
+# dotai
 .ai/tmp/
-.codex
 CLAUDE.md
+MEMORY.local.md
+.codex
+.browse/
+.playwright-mcp/
+
+# Go
 /browse
 browser.test
-.playwright-mcp/
+*.test
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store

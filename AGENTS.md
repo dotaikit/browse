@@ -1,24 +1,16 @@
 # browse · Agent Spec
 
-## What This Is
+> Read `~/dotai/AGENTS.md` (global workflow) first, then this file (project constraints), then the role file specified in the prompt.
 
-CLI that gives you (the AI agent) direct browser control from the terminal. You issue text commands, get text back. No GUI, no MCP overhead.
+## Project Overview
+
+Browser automation CLI for AI agents — text commands in, text results out. Single Go binary, Chrome DevTools Protocol, ~100ms per command.
 
 Architecture: `browse <command>` → HTTP → `browser.Manager` → Chrome CDP
 
-## Quick Reference
-
-```bash
-browse serve --headed              # or: browse serve (connect to existing Chrome)
-browse goto https://example.com
-browse snapshot -i                 # interactive elements with @e refs
-browse fill @e3 "query"
-browse click @e5
-browse wait --networkidle
-browse snapshot -i                 # verify result
-```
-
-Full command list: see `SKILL.md` in this repo.
+- **browse serve**: HTTP server with bearer token auth, idle auto-shutdown
+- **browse \<cmd\>**: CLI client, auto-discovers server via `.browse/state.json`, auto-starts if needed
+- **Scope**: navigation, snapshot, interaction, read/write, monitoring, visual capture, tabs, state management
 
 ## Project Structure
 
@@ -30,14 +22,57 @@ Full command list: see `SKILL.md` in this repo.
 | `internal/cli/` | Client: auto-discovers server via `.browse/state.json`, auto-starts if needed |
 | `internal/state/` | State file read/write (pid, port, token) |
 
-## Build & Test
+## Rules
 
-- Module: `github.com/dotaikit/browse`, Go 1.26
+- Go 1.26, minimal external dependencies (stdlib first)
+- Single binary distribution, cross-compiled for linux/darwin × amd64/arm64
+- Module: `github.com/dotaikit/browse`
 - Dependencies: `chromedp v0.15.1`, `cdproto`, `uuid`
+- Tests with `go test ./...` (stdlib only, no external test frameworks)
+- Tests require Chrome with `--remote-debugging-port=9222`
 - Build: `go build -o browse ./cmd/browse/`
 - Version build: `go build -ldflags="-s -w -X main.version=v0.1.0" -o browse ./cmd/browse/`
-- Test: `go test ./...` (235 tests, requires Chrome with `--remote-debugging-port=9222`)
-- No external test frameworks — stdlib only
+- Git branching: see **Git Workflow** section below
+
+## Git Workflow
+
+### Branching
+
+- `main` — 稳定分支，只接受 squash merge
+- `dev` — 开发分支，从 `main` 切出，合并后删除
+- `archive/<version>` — 版本归档，保留开发完整历史供 debug 追溯
+- `archive/fix-<slug>` — fix 归档，统一在 archive/ namespace 下
+
+### Commit 规范
+
+- 每个任务的 plan 文件（status: done）必须和代码在**同一个 commit** 里提交
+- 不要把 plan 更新攒到最后集中处理
+
+### Squash Merge 流程
+
+按顺序执行，每步完成后再进入下一步：
+
+1. **确认 dev 上所有工作完成** — 代码、测试、plan 文件都已提交，所有 plan status: done
+2. **`dotai snapshot`** — 吸收所有已完成 plan 到 snapshot.md，删除 plan 文件
+3. **验证 dev 干净** — 无残留 plan 文件，snapshot 内容正确
+4. **提交 snapshot** — `chore: snapshot — absorb all completed plans`
+5. **归档开发分支** — `git branch archive/<version> dev`
+6. **Squash merge** — `git checkout main && git merge --squash dev && git commit`
+7. **删除 dev** — `git branch -D dev`
+8. **用户 push** — Orchestrator 不 push
+
+### 注意
+
+- 不要在 squash merge 后再 amend — 所有收尾在 merge 前完成
+- 后续新开发从 main 切出新的 dev 分支
+- 任何修改都要切分支，不直接在 main 上改
+
+## Toolchain
+
+- Go 1.26
+- chromedp / cdproto (CDP protocol)
+- go test (testing, stdlib only)
+- GitHub Actions (cross-compile + release)
 
 ## Key Behaviors
 
