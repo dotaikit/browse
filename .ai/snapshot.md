@@ -1,18 +1,22 @@
 # Project Snapshot
 
-Last updated: 2026-04-05
+Last updated: 2026-04-09
 
 ## Overview
 
-`browse` is a single-binary Go browser automation CLI distributed via GitHub Releases and installable via `curl | sh`. It exposes browser control commands through a local HTTP server authenticated with bearer tokens, executing them via Chrome DevTools Protocol (CDP). The runtime flow is `cmd/browse` (CLI serve/client entry with version injection) -> `internal/cli` (auto-discovery/auto-start) -> `internal/server` (auth + command endpoint) -> `internal/browser.Manager` (CDP command execution and shared state), with `.browse/state.json` used for server discovery. The module is `github.com/dotaikit/browse` (renamed from gqk/browse) and builds to a single statically-compiled binary with version injection via ldflags.
+`browse` is a single-binary Go browser automation CLI distributed via GitHub Releases and installable via `curl | sh`. It exposes browser control commands through a local HTTP server authenticated with bearer tokens, executing them via Chrome DevTools Protocol (CDP). The runtime flow is `cmd/browse` (CLI serve/client entry with version injection) -> `internal/cli` (auto-discovery/auto-start) -> `internal/server` (auth + command endpoint) -> `internal/browser.Manager` (CDP command execution and shared state), with `.browse/state.json` used for server discovery. The module is `github.com/dotaikit/browse` (renamed from gqk/browse) and builds to a single statically-compiled binary with version injection via ldflags. The project follows dotai workflow conventions: development on `dev` branch with squash merge to `main`, all plans committed with code in the same commit, and snapshot absorption before release.
 
 ## Release & Distribution Infrastructure
 
 Version injection occurs at build time: `cmd/browse/main.go` declares `var version = "dev"`, with a `version` / `--version` command handler that outputs `browse <version>`. The `.github/workflows/release.yml` workflow triggers on `v*` tags, cross-compiles for 4 platform/arch combinations (linux/darwin × amd64/arm64), archives each binary as `browse-{os}-{arch}.tar.gz`, generates a SHA256 checksums file, and publishes both archives and the install script to GitHub Releases. The `install.sh` script detects OS and architecture at runtime, downloads the corresponding archive from GitHub Releases, validates SHA256 checksums (best-effort: sha256sum/shasum when available, warning if missing), extracts the binary to `~/.local/bin` (or `$INSTALL_DIR`), and prints a PATH setup reminder if needed. This enables `curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/install.sh | sh` one-liner installation without requiring Go tools.
 
-## Documentation
+## Documentation & Scaffolding
 
-`README.md` (40 lines) provides a concise human-facing introduction: one-line description, install instructions (curl one-liner + go install), quick-start examples, pointer to SKILL.md for the complete reference, and a note that the tool is designed for AI agent use. `SKILL.md` (164 lines) is the authoritative command reference organized by category (Navigation, Snapshot, Interaction, Read, Write, Monitor, Visual, Tabs, Meta), including server flags, typical workflows, and implementation notes. Both documents reference `https://raw.githubusercontent.com/dotaikit/browse/main/...` install URLs and the Go install path `github.com/dotaikit/browse/cmd/browse@latest`, pointing users to the dotaikit organization.
+`README.md` (37 lines) provides a concise human-facing introduction: one-line description, install instructions (curl one-liner + go install), quick-start examples, pointer to SKILL.md for the complete reference, and a note that the tool is designed for AI agent use. `README.zh-CN.md` is a Chinese translation of the same content. `SKILL.md` (164+ lines) is the authoritative command reference organized by category (Navigation, Snapshot, Interaction, Read, Write, Monitor, Visual, Tabs, Meta), including server flags, typical workflows, and implementation notes. Both documents reference `https://raw.githubusercontent.com/dotaikit/browse/main/...` install URLs and the Go install path `github.com/dotaikit/browse/cmd/browse@latest`, pointing users to the dotaikit organization.
+
+`AGENTS.md` documents project-specific constraints and workflow: Go 1.26, minimal dependencies (stdlib first), single binary distribution for linux/darwin × amd64/arm64, module `github.com/dotaikit/browse`, build via `go build`, version build via ldflags, and test via `go test ./...` (stdlib only, no external frameworks). Git workflow specifies `main` as stable (squash-merge only), `dev` for development, and `archive/*` for historical branches; all plan files (status: done) must be committed with code, and `dotai snapshot` must be run before squash-merging to absorb completed plans.
+
+`skills.sh` is a Bash installer script adapted for the Go binary distribution, copied to `~/dotai/skills/browse/` during skill installation. It replaces external package managers with binary-distribution choices (`go install` or `curl | sh`), follows the dotai skill installer pattern with overwrite-policy checks (diff/confirm/--force), and provides helper functions (info/ok/err/die) consistent with other skill installers.
 
 ## Source File Structure
 
@@ -22,7 +26,7 @@ Version injection occurs at build time: `cmd/browse/main.go` declares `var versi
 | `internal/cli/cli.go` | Client-side auto-discovery (reads `.browse/state.json` for port/token), auto-start server if not running, command forwarding via HTTP |
 | `internal/server/server.go` | HTTP server with auth middleware, `/health`, `/command`, `/refs` endpoints, idle timeout, sentinel error handling for restart/stop |
 | `internal/browser/browser.go` | `Manager` struct (Chrome connection, refs, frame path, watch, dialog mode), `New()` (remote CDP), `NewHeaded()` (local Chrome launch), `Execute()` command dispatcher |
-| `internal/browser/commands.go` | Navigation (goto/back/forward/reload), interaction (click/fill/type/hover/select/scroll/wait), URL validation, path validation, back/forward timeout with JS fallback |
+| `internal/browser/commands.go` | Navigation (goto/back/forward/reload), interaction (click/fill/type/hover/select/scroll/wait), screenshot with `--viewport`, `--clip`, `--scale`, `--width` flags, URL validation, path validation, back/forward timeout with JS fallback |
 | `internal/browser/commands_read.go` | Read commands: forms, css, attrs, is, cookies, storage, perf, eval; JS wrapping helpers (hasAwait, wrapForEvaluate) |
 | `internal/browser/commands_write.go` | Write commands: press, viewport, useragent, cookie, cookie-import, header, upload, dialog-accept, dialog-dismiss |
 | `internal/browser/commands_meta.go` | Meta commands: newtab, closetab, status, chain, diff, pdf, responsive, state save/load, watch, handoff, resume, restart, stop |
@@ -33,6 +37,7 @@ Version injection occurs at build time: `cmd/browse/main.go` declares `var versi
 | `internal/browser/cookie_import.go` | Chromium cookie DB discovery, AES-128-CBC decryption, PBKDF2 key derivation, OS keychain integration |
 | `.github/workflows/release.yml` | GitHub Actions workflow: tag push → cross-compile 4 platforms → sha256 checksums → GitHub Release |
 | `install.sh` | Installation script: OS/ARCH detection → download → checksum verify → install to ~/.local/bin |
+| `.gitignore` | Organized into sections: dotai (`.ai/tmp/`, CLAUDE.md, MEMORY.local.md), Go (binaries, test artifacts), IDE (.idea/, .vscode/, swap), OS (.DS_Store) |
 
 ## Command Reference
 
@@ -50,13 +55,22 @@ Version injection occurs at build time: `cmd/browse/main.go` declares `var versi
 
 **Monitor** (3): `console [--clear|--errors]`, `network [--clear|--errors]`, `dialog [--clear|--errors]`
 
-**Visual** (3): `screenshot [--viewport] [--clip x,y,w,h] [path]`, `pdf [path]`, `responsive [prefix]`
+**Visual** (4): `screenshot [--viewport] [--clip x,y,w,h] [--scale N] [--width N] [path]`, `pdf [path]`, `responsive [prefix]`
 
 **Tabs** (4): `tabs`, `tab <index>`, `newtab [url]`, `closetab <id|index>`
 
 **Meta** (8): `status`, `chain <cmds>`, `diff <url1> <url2>`, `state <save|load> <name>`, `watch <start|stop|add>`, `handoff [msg]`, `resume`, `restart`, `stop`
 
 **Version** (1): `version`, `--version`
+
+## Visual Capture Enhancements
+
+The `screenshot` command now supports dynamic DPR and post-capture resizing:
+
+- `--scale N` (float64) — override device pixel ratio before capture (e.g., `--scale 1` forces 1× on HiDPI, `--scale 2` forces 2×). Implementation: saves current viewport, calls `chromedp.EmulateViewport` with `chromedp.EmulateScale(N)`, captures, then restores original metrics to avoid side effects.
+- `--width N` (int) — post-capture resize PNG to N pixels wide, preserving aspect ratio (height calculated as `origHeight * N / origWidth`). Implementation: after screenshot file write, decode PNG → resize with `golang.org/x/image/draw.BiLinear` → re-encode. Composes correctly with `--viewport` and `--clip` since it operates on final PNG bytes.
+
+Both flags can be combined: `browse screenshot --scale 1 --width 800 /tmp/out.png` produces a 1× DPR screenshot resized to 800px wide. New dependency added: `golang.org/x/image v0.38.0`.
 
 ## Shared Runtime Mechanisms
 
@@ -92,11 +106,11 @@ Session state can be saved/loaded as versioned JSON in `~/.browse/states/<name>.
 
 ## Startup Modes And Toolchain
 
-The server supports remote-CDP mode (`--chrome-url`) and local headed mode (`--headed`, `--user-data-dir`, `--extension`, `--window-size`) with explicit mutual exclusion. The module is `github.com/dotaikit/browse` targeting Go `1.26` and depends primarily on `chromedp`/`cdproto` plus `uuid`; runtime artifacts (`.browse/`, `.ai/tmp/`, build outputs) are gitignored. Releases are automated: version is injected via ldflags at build time, GitHub Actions cross-compiles for 4 platforms on tag push, and the install script enables one-line installation from GitHub Releases.
+The server supports remote-CDP mode (`--chrome-url`) and local headed mode (`--headed`, `--user-data-dir`, `--extension`, `--window-size`) with explicit mutual exclusion. The module is `github.com/dotaikit/browse` targeting Go `1.26` and depends primarily on `chromedp`/`cdproto` plus `uuid` and `golang.org/x/image`; runtime artifacts (`.browse/`, `.ai/tmp/`, build outputs) are gitignored. Releases are automated: version is injected via ldflags at build time, GitHub Actions cross-compiles for 4 platforms on tag push, and the install script enables one-line installation from GitHub Releases.
 
 ## Test Architecture
 
-`internal/browser` uses a mixed strategy: shared headless-Chrome integration tests with `httptest` fixtures for command behavior, plus pure unit tests for parsing, formatting, diffing, validation, and crypto helpers. `TestMain` manages a shared Manager + fixture HTTP server; `newTestManager(t)` provides isolated instances; Chrome unavailability triggers `t.Skip` not `t.Fatal`. Coverage: 235 sub-tests across command groups (navigation/read/write/meta/snapshot/frame/monitoring), security validation (URL/path/profile), watch/state TTL, headed option parsing, CLI flag parsing, and server auth/security-audit. Test files: 13 in `internal/browser/`, 1 in `cmd/browse/`, 1 in `internal/server/`; 12 HTML fixtures in `testdata/fixtures/`.
+`internal/browser` uses a mixed strategy: shared headless-Chrome integration tests with `httptest` fixtures for command behavior, plus pure unit tests for parsing, formatting, diffing, validation, and crypto helpers. `TestMain` manages a shared Manager + fixture HTTP server; `newTestManager(t)` provides isolated instances; Chrome unavailability triggers `t.Skip` not `t.Fatal`. Coverage: 235+ sub-tests across command groups (navigation/read/write/meta/snapshot/frame/monitoring), visual capture (`screenshot` with scale/width flags), security validation (URL/path/profile), watch/state TTL, headed option parsing, CLI flag parsing, and server auth/security-audit. Test files: 13 in `internal/browser/`, 1 in `cmd/browse/`, 1 in `internal/server/`; 12 HTML fixtures in `testdata/fixtures/`.
 
 ## Known Limitations
 
