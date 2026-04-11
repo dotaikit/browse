@@ -88,3 +88,20 @@ func TestParseWindowSizeInvalid(t *testing.T) {
 		t.Fatal("parseWindowSize() error = nil, want non-nil")
 	}
 }
+
+func TestParseServeConfigProxy(t *testing.T) {
+	cfg, err := parseServeConfig([]string{"--headed", "--proxy", "socks5://127.0.0.1:1080"})
+	if err != nil {
+		t.Fatalf("parseServeConfig() error = %v", err)
+	}
+	if cfg.proxyServer != "socks5://127.0.0.1:1080" {
+		t.Fatalf("proxyServer = %q, want %q", cfg.proxyServer, "socks5://127.0.0.1:1080")
+	}
+}
+
+func TestParseServeConfigProxyRequiresHeaded(t *testing.T) {
+	_, err := parseServeConfig([]string{"--proxy", "socks5://127.0.0.1:1080"})
+	if err == nil {
+		t.Fatal("parseServeConfig() error = nil, want non-nil")
+	}
+}

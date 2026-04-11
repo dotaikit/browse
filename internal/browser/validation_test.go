@@ -212,6 +212,48 @@ func TestValidationOutputPath(t *testing.T) {
 	})
 }
 
+func TestValidateProxyValid(t *testing.T) {
+	cases := []string{
+		"",
+		"http://127.0.0.1:8080",
+		"https://proxy.example.com:443",
+		"socks5://127.0.0.1:1080",
+		"http://user:pass@proxy.example.com:8080",
+	}
+
+	for _, raw := range cases {
+		t.Run(raw, func(t *testing.T) {
+			if err := ValidateProxy(raw); err != nil {
+				t.Fatalf("ValidateProxy(%q) = %v, want nil", raw, err)
+			}
+		})
+	}
+}
+
+func TestValidateProxyInvalid(t *testing.T) {
+	cases := []struct {
+		raw     string
+		wantErr string
+	}{
+		{"ftp://proxy.example.com:21", "scheme must be"},
+		{"://missing-scheme", "invalid proxy URL"},
+		{"socks5://", "missing host"},
+		{"not-a-url", "scheme must be"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.raw, func(t *testing.T) {
+			err := ValidateProxy(tc.raw)
+			if err == nil {
+				t.Fatalf("ValidateProxy(%q) = nil, want error containing %q", tc.raw, tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("ValidateProxy(%q) = %q, want error containing %q", tc.raw, err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func stubLookupHost(t *testing.T, stub func(string) ([]string, error)) {
 	t.Helper()
 	orig := lookupHost

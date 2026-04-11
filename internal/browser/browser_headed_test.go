@@ -62,3 +62,36 @@ func TestNormalizeHeadedOptionsRejectsInvalidWindowSize(t *testing.T) {
 		t.Fatal("normalizeHeadedOptions() error = nil, want non-nil")
 	}
 }
+
+func TestNormalizeHeadedOptionsProxy(t *testing.T) {
+	t.Run("valid proxy passes through", func(t *testing.T) {
+		opts, err := normalizeHeadedOptions(HeadedOptions{
+			ProxyServer: "socks5://127.0.0.1:1080",
+		})
+		if err != nil {
+			t.Fatalf("normalizeHeadedOptions() error = %v", err)
+		}
+		if opts.ProxyServer != "socks5://127.0.0.1:1080" {
+			t.Fatalf("ProxyServer = %q, want %q", opts.ProxyServer, "socks5://127.0.0.1:1080")
+		}
+	})
+
+	t.Run("empty proxy is allowed", func(t *testing.T) {
+		opts, err := normalizeHeadedOptions(HeadedOptions{})
+		if err != nil {
+			t.Fatalf("normalizeHeadedOptions() error = %v", err)
+		}
+		if opts.ProxyServer != "" {
+			t.Fatalf("ProxyServer = %q, want empty", opts.ProxyServer)
+		}
+	})
+
+	t.Run("invalid proxy is rejected", func(t *testing.T) {
+		_, err := normalizeHeadedOptions(HeadedOptions{
+			ProxyServer: "ftp://proxy.example.com:21",
+		})
+		if err == nil {
+			t.Fatal("normalizeHeadedOptions() error = nil, want non-nil")
+		}
+	})
+}

@@ -41,6 +41,7 @@ Server auto-starts on first command. 30-minute idle auto-shutdown.
 | `--user-data-dir` | `~/.browse/chrome-profile` | Headed mode profile directory |
 | `--extension` | — | Comma-separated extension paths (headed only) |
 | `--window-size` | `1280x900` | Headed mode window size |
+| `--proxy` | — | Proxy URL: `http://`, `https://`, or `socks5://` (headed only) |
 | `--port`, `-p` | random | Server port |
 
 ## Commands
@@ -153,3 +154,4 @@ browse screenshot /tmp/result.png
 - `snapshot -i` is the primary command for understanding page state
 - `handoff` / `resume` enables human-AI shared control
 - Chrome 136+ requires `--user-data-dir` flag
+- `--proxy` routes all Chrome traffic through a proxy (HTTP/HTTPS/SOCKS5); headed mode only

@@ -132,9 +132,14 @@ func (m *Manager) cmdStatus(args []string) (string, error) {
 
 	pid := os.Getpid()
 
+	proxy := m.proxyServer
+	if proxy == "" {
+		proxy = "(none)"
+	}
+
 	return fmt.Sprintf(
-		"Status: healthy\nURL: %s\nTabs: %d\nUptime: %s\nPID: %d",
-		currentURL, tabCount, uptime, pid,
+		"Status: healthy\nURL: %s\nTabs: %d\nUptime: %s\nPID: %d\nProxy: %s",
+		currentURL, tabCount, uptime, pid, proxy,
 	), nil
 }
 

@@ -1,6 +1,6 @@
 # Project Snapshot
 
-Last updated: 2026-04-09
+Last updated: 2026-04-11
 
 ## Overview
 
@@ -22,10 +22,11 @@ Version injection occurs at build time: `cmd/browse/main.go` declares `var versi
 
 | File | Responsibility |
 |------|---------------|
-| `cmd/browse/main.go` | CLI entry point, `serve` subcommand with flag parsing (`--chrome-url`, `--headed`, `--user-data-dir`, `--extension`, `--window-size`, `--port`), version injection via ldflags, client mode forwards commands to server |
+| `cmd/browse/main.go` | CLI entry point, `serve` subcommand with flag parsing (`--chrome-url`, `--headed`, `--user-data-dir`, `--extension`, `--window-size`, `--proxy`, `--port`), version injection via ldflags, client mode forwards commands to server |
 | `internal/cli/cli.go` | Client-side auto-discovery (reads `.browse/state.json` for port/token), auto-start server if not running, command forwarding via HTTP |
 | `internal/server/server.go` | HTTP server with auth middleware, `/health`, `/command`, `/refs` endpoints, idle timeout, sentinel error handling for restart/stop |
-| `internal/browser/browser.go` | `Manager` struct (Chrome connection, refs, frame path, watch, dialog mode), `New()` (remote CDP), `NewHeaded()` (local Chrome launch), `Execute()` command dispatcher |
+| `internal/browser/browser.go` | `Manager` struct (Chrome connection, refs, frame path, watch, dialog mode, proxy), `New()` (remote CDP), `NewHeaded()` (local Chrome launch with proxy flag injection), `Execute()` command dispatcher |
+| `internal/browser/validation.go` | `ValidateProxy()` validates proxy URL scheme (http/https/socks5) and host; empty string allowed |
 | `internal/browser/commands.go` | Navigation (goto/back/forward/reload), interaction (click/fill/type/hover/select/scroll/wait), screenshot with `--viewport`, `--clip`, `--scale`, `--width` flags, URL validation, path validation, back/forward timeout with JS fallback |
 | `internal/browser/commands_read.go` | Read commands: forms, css, attrs, is, cookies, storage, perf, eval; JS wrapping helpers (hasAwait, wrapForEvaluate) |
 | `internal/browser/commands_write.go` | Write commands: press, viewport, useragent, cookie, cookie-import, header, upload, dialog-accept, dialog-dismiss |
@@ -59,7 +60,7 @@ Version injection occurs at build time: `cmd/browse/main.go` declares `var versi
 
 **Tabs** (4): `tabs`, `tab <index>`, `newtab [url]`, `closetab <id|index>`
 
-**Meta** (8): `status`, `chain <cmds>`, `diff <url1> <url2>`, `state <save|load> <name>`, `watch <start|stop|add>`, `handoff [msg]`, `resume`, `restart`, `stop`
+**Meta** (9): `status` (now includes proxy), `chain <cmds>`, `diff <url1> <url2>`, `state <save|load> <name>`, `watch <start|stop|add>`, `handoff [msg]`, `resume`, `restart`, `stop`
 
 **Version** (1): `version`, `--version`
 
@@ -106,7 +107,11 @@ Session state can be saved/loaded as versioned JSON in `~/.browse/states/<name>.
 
 ## Startup Modes And Toolchain
 
-The server supports remote-CDP mode (`--chrome-url`) and local headed mode (`--headed`, `--user-data-dir`, `--extension`, `--window-size`) with explicit mutual exclusion. The module is `github.com/dotaikit/browse` targeting Go `1.26` and depends primarily on `chromedp`/`cdproto` plus `uuid` and `golang.org/x/image`; runtime artifacts (`.browse/`, `.ai/tmp/`, build outputs) are gitignored. Releases are automated: version is injected via ldflags at build time, GitHub Actions cross-compiles for 4 platforms on tag push, and the install script enables one-line installation from GitHub Releases.
+The server supports remote-CDP mode (`--chrome-url`) and local headed mode (`--headed`, `--user-data-dir`, `--extension`, `--window-size`, `--proxy`) with explicit mutual exclusion. The module is `github.com/dotaikit/browse` targeting Go `1.26` and depends primarily on `chromedp`/`cdproto` plus `uuid` and `golang.org/x/image`; runtime artifacts (`.browse/`, `.ai/tmp/`, build outputs) are gitignored. Releases are automated: version is injected via ldflags at build time, GitHub Actions cross-compiles for 4 platforms on tag push, and the install script enables one-line installation from GitHub Releases.
+
+## Proxy Support For Headed Mode
+
+Headed mode now supports `--proxy` flag to route all browser traffic through HTTP/HTTPS/SOCKS5 proxies. `ValidateProxy()` in `internal/browser/validation.go` validates URLs before launch (allows empty string, requires scheme ∈ {http, https, socks5}, non-empty host). CLI flag parsing in `cmd/browse/main.go` enforces that `--proxy` requires `--headed` (remote CDP mode expects proxy configuration at Chrome startup time). `HeadedOptions.ProxyServer` is passed to `NewHeaded()`, which injects the Chrome flag `--proxy-server` during `chromedp.NewExecAllocator()`. `Manager.proxyServer` field and `ProxyServer()` getter preserve the setting, and `cmdStatus()` outputs the current proxy (`(none)` if empty). Tests cover validation (valid/invalid formats), flag parsing, headed option normalization, and error cases (proxy without headed).
 
 ## Test Architecture
 

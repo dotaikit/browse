@@ -29,6 +29,7 @@ type serveConfig struct {
 	userDataDir       string
 	extensionPaths    []string
 	windowSize        [2]int
+	proxyServer       string
 }
 
 func main() {
@@ -69,6 +70,7 @@ func runServer() {
 			UserDataDir:    cfg.userDataDir,
 			ExtensionPaths: cfg.extensionPaths,
 			WindowSize:     cfg.windowSize,
+			ProxyServer:    cfg.proxyServer,
 		})
 		if err != nil {
 			log.Fatalf("Failed to start: %s", err)
@@ -108,6 +110,7 @@ func parseServeConfig(args []string) (serveConfig, error) {
 	userDataDirProvided := false
 	extensionProvided := false
 	windowSizeProvided := false
+	proxyProvided := false
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -160,6 +163,14 @@ func parseServeConfig(args []string) (serveConfig, error) {
 			}
 			cfg.windowSize = size
 			windowSizeProvided = true
+
+		case "--proxy":
+			if i+1 >= len(args) {
+				return serveConfig{}, fmt.Errorf("missing value for %s", args[i])
+			}
+			i++
+			cfg.proxyServer = args[i]
+			proxyProvided = true
 		}
 	}
 
@@ -167,7 +178,7 @@ func parseServeConfig(args []string) (serveConfig, error) {
 		return serveConfig{}, fmt.Errorf("--headed cannot be used with --chrome-url")
 	}
 	if !cfg.headed {
-		headedOnlyFlags := make([]string, 0, 3)
+		headedOnlyFlags := make([]string, 0, 4)
 		if userDataDirProvided {
 			headedOnlyFlags = append(headedOnlyFlags, "--user-data-dir")
 		}
@@ -176,6 +187,9 @@ func parseServeConfig(args []string) (serveConfig, error) {
 		}
 		if windowSizeProvided {
 			headedOnlyFlags = append(headedOnlyFlags, "--window-size")
+		}
+		if proxyProvided {
+			headedOnlyFlags = append(headedOnlyFlags, "--proxy")
 		}
 		if len(headedOnlyFlags) > 0 {
 			return serveConfig{}, fmt.Errorf("%s require --headed", strings.Join(headedOnlyFlags, ", "))
@@ -226,7 +240,7 @@ func printUsage() {
 	fmt.Print(`browse — lightweight browser automation CLI (Go + CDP)
 
 Usage:
-  browse serve [--chrome-url URL | --headed] [--port N] [--user-data-dir DIR] [--extension PATHS] [--window-size WxH]
+  browse serve [--chrome-url URL | --headed] [--port N] [--user-data-dir DIR] [--extension PATHS] [--window-size WxH] [--proxy URL]
                                                 Start the persistent server
   browse <command> [args...]                    Send command to server
   browse version                                Show CLI version
@@ -237,6 +251,7 @@ Server flags:
   --user-data-dir     Headed mode profile dir (default: ~/.browse/chrome-profile)
   --extension         Comma-separated Chrome extension paths (headed mode only)
   --window-size       Headed mode window size (default: 1280x900)
+  --proxy             Proxy server URL, e.g. socks5://127.0.0.1:1080 (headed only)
   --port, -p          Server port (default: random)
 
 Commands:

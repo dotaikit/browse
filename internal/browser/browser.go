@@ -39,6 +39,7 @@ type HeadedOptions struct {
 	UserDataDir    string
 	ExtensionPaths []string
 	WindowSize     [2]int
+	ProxyServer    string
 }
 
 const (
@@ -63,6 +64,7 @@ type Manager struct {
 	ctxCancel   context.CancelFunc
 	startedAt   time.Time
 	headedMode  bool
+	proxyServer string
 
 	mu             sync.RWMutex
 	refMap         map[string]RefEntry
@@ -137,6 +139,10 @@ func NewHeaded(opts HeadedOptions) (*Manager, error) {
 		)
 	}
 
+	if normalized.ProxyServer != "" {
+		allocOpts = append(allocOpts, chromedp.Flag("proxy-server", normalized.ProxyServer))
+	}
+
 	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), allocOpts...)
 	ctx, ctxCancel := chromedp.NewContext(allocCtx)
 
@@ -155,6 +161,7 @@ func NewHeaded(opts HeadedOptions) (*Manager, error) {
 		ctxCancel:     ctxCancel,
 		startedAt:     time.Now(),
 		headedMode:    true,
+		proxyServer:   normalized.ProxyServer,
 		refMap:        make(map[string]RefEntry),
 		consoleBuffer: NewRingBuffer[ConsoleEntry](50000),
 		networkBuffer: NewRingBuffer[NetworkEntry](50000),
@@ -177,6 +184,7 @@ func (m *Manager) Close() {
 func (m *Manager) ChromeURL() string    { return m.chromeURL }
 func (m *Manager) StartedAt() time.Time { return m.startedAt }
 func (m *Manager) IsHeaded() bool       { return m.headedMode }
+func (m *Manager) ProxyServer() string  { return m.proxyServer }
 
 // Ctx returns the chromedp context for running actions.
 func (m *Manager) Ctx() context.Context { return m.ctx }
@@ -374,6 +382,10 @@ func normalizeHeadedOptions(opts HeadedOptions) (HeadedOptions, error) {
 		opts.WindowSize = [2]int{defaultWindowWidth, defaultWindowHeight}
 	} else if width <= 0 || height <= 0 {
 		return HeadedOptions{}, fmt.Errorf("window size must be positive, got %dx%d", width, height)
+	}
+
+	if err := ValidateProxy(opts.ProxyServer); err != nil {
+		return HeadedOptions{}, err
 	}
 
 	return opts, nil
