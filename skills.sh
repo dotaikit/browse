@@ -3,46 +3,44 @@ set -eu
 
 SKILL_NAME="browse"
 REPO_URL="https://github.com/dotaikit/browse"
+RAW_BASE="https://raw.githubusercontent.com/dotaikit/browse"
 SKILL_FILES="SKILL.md"
 DEFAULT_TARGET="$HOME/dotai/skills/$SKILL_NAME"
 
 FORCE=false
+VERSION="main"
 
 info()  { printf '\033[0;34m→\033[0m %s\n' "$*"; }
 ok()    { printf '\033[0;32m✓\033[0m %s\n' "$*"; }
 err()   { printf '\033[0;31m✗\033[0m %s\n' "$*" >&2; }
 die()   { err "$@"; exit 1; }
 
-setup_source() {
-    if [ -f "SKILL.md" ]; then
-        SOURCE_DIR="$(pwd)"
-        NEED_CLEANUP=false
-    else
-        info "Downloading from ${REPO_URL}..."
-        SOURCE_DIR="$(mktemp -d)"
-        NEED_CLEANUP=true
-        command -v git >/dev/null 2>&1 || die "git is required for remote installation"
-        git clone --depth 1 "$REPO_URL" "$SOURCE_DIR" 2>/dev/null
-        [ -f "$SOURCE_DIR/SKILL.md" ] || die "SKILL.md not found in repo"
+cleanup() {
+    if [ -n "${BUILD_DIR:-}" ] && [ -d "${BUILD_DIR:-}" ]; then
+        rm -rf "$BUILD_DIR"
     fi
 }
-
-cleanup_source() {
-    if [ "${NEED_CLEANUP:-false}" = true ] && [ -n "${SOURCE_DIR:-}" ]; then
-        rm -rf "$SOURCE_DIR"
-    fi
-}
-trap cleanup_source EXIT
+trap cleanup EXIT
 
 build_skill() {
     BUILD_DIR="$(mktemp -d)"
     local skill_dir="$BUILD_DIR/$SKILL_NAME"
     mkdir -p "$skill_dir"
-    for f in $SKILL_FILES; do
-        local dest="$skill_dir/$f"
-        mkdir -p "$(dirname "$dest")"
-        cp "$SOURCE_DIR/$f" "$dest"
-    done
+    if [ -f "SKILL.md" ]; then
+        for f in $SKILL_FILES; do
+            local dest="$skill_dir/$f"
+            mkdir -p "$(dirname "$dest")"
+            cp "$(pwd)/$f" "$dest"
+        done
+    else
+        info "Downloading from ${REPO_URL} (${VERSION})..."
+        command -v curl >/dev/null 2>&1 || die "curl is required for remote installation"
+        for f in $SKILL_FILES; do
+            local dest="$skill_dir/$f"
+            mkdir -p "$(dirname "$dest")"
+            curl -fsSL "${RAW_BASE}/${VERSION}/${f}" -o "$dest"
+        done
+    fi
     ok "Built skill → $skill_dir"
 }
 
@@ -61,7 +59,7 @@ install_skill() {
             info "Skill already exists at $target — changes detected:"
             diff -ru "$target" "$BUILD_DIR/$SKILL_NAME" || true
             printf '\n%s' "Overwrite? [y/N] "
-            read -r answer
+            read -r answer </dev/tty
             case "$answer" in
                 [yY]*) ;;
                 *) die "Aborted." ;;
@@ -91,14 +89,15 @@ main() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --force) FORCE=true; shift ;;
-            *) target="$1"; shift ;;
+            --version|-v) VERSION="$2"; shift 2 ;;
+            --target|-t) target="$2"; shift 2 ;;
+            *) die "Unknown argument: $1" ;;
         esac
     done
 
     echo ""
     echo "  $SKILL_NAME installer"
     echo ""
-    setup_source
     build_skill
     install_skill "$target"
     install_cli

@@ -4,11 +4,32 @@ Browser automation CLI designed for AI agents. Your agent issues text commands, 
 
 Single Go binary, Chrome DevTools Protocol, ~100ms per command.
 
+## Agent Skill
+
+Follows the [Agent Skills](https://agentskills.io) spec. See [SKILL.md](SKILL.md).
+
+```bash
+# dotai
+curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/skills.sh | sh
+
+# specific version
+curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/skills.sh | sh -s -- -v v0.3.0
+
+# other agents
+curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/skills.sh | sh -s -- -t ~/.claude/skills/browse
+
+# other agents, specific version
+curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/skills.sh | sh -s -- -v v0.3.0 -t ~/.claude/skills/browse
+```
+
 ## Install
 
 ```bash
 # One-liner (Linux/macOS)
 curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/install.sh | sh
+
+# Specific version
+curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/install.sh | sh -s -- -v v0.3.0
 
 # Or with Go
 go install github.com/dotaikit/browse/cmd/browse@latest

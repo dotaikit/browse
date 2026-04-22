@@ -5,8 +5,23 @@ REPO="${BROWSE_REPO:-dotaikit/browse}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${BROWSE_VERSION:-}"
 
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --version|-v) VERSION="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
 if [ "${INSTALL_DIR#~/}" != "$INSTALL_DIR" ]; then
   INSTALL_DIR="$HOME/${INSTALL_DIR#~/}"
+fi
+
+if [ -n "$VERSION" ] && command -v browse >/dev/null 2>&1; then
+  INSTALLED="$(browse --version 2>/dev/null | awk '{print $2}' || true)"
+  if [ "$INSTALLED" = "$VERSION" ]; then
+    printf 'browse %s already installed at %s\n' "$VERSION" "$(command -v browse)"
+    exit 0
+  fi
 fi
 
 require_cmd() {

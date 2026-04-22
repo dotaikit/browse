@@ -4,11 +4,32 @@
 
 单个 Go 二进制，基于 Chrome DevTools Protocol，每条命令约 100ms。
 
+## Agent Skill
+
+遵循 [Agent Skills](https://agentskills.io) 规范。详见 [SKILL.md](SKILL.md)。
+
+```bash
+# dotai
+curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/skills.sh | sh
+
+# 安装指定版本
+curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/skills.sh | sh -s -- -v v0.3.0
+
+# 其他 agent
+curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/skills.sh | sh -s -- -t ~/.claude/skills/browse
+
+# 其他 agent，指定版本
+curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/skills.sh | sh -s -- -v v0.3.0 -t ~/.claude/skills/browse
+```
+
 ## 安装
 
 ```bash
 # 一行命令（Linux/macOS）
 curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/install.sh | sh
+
+# 安装指定版本
+curl -fsSL https://raw.githubusercontent.com/dotaikit/browse/main/install.sh | sh -s -- -v v0.3.0
 
 # 或使用 Go
 go install github.com/dotaikit/browse/cmd/browse@latest
